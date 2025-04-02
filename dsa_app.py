@@ -153,10 +153,10 @@ if st.sidebar.button("Suporte"):
     st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
 
 # Título principal
-st.title(":100: Data Science Academy")
+st.title(":100: Um agente de IA para a NASDAQ")
 
 # Interface principal
-st.header("Day Trade Analytics em Tempo Real com Agentes de IA")
+st.header("Day Trade Analytics em Tempo Real")
 
 # Caixa de texto para input do usuário
 ticker = st.text_input("Digite o Código (símbolo do ticker):").upper()
