@@ -126,7 +126,7 @@ multi_ai_agent = Agent(team=[dsa_agente_web_search, dsa_agente_financeiro],
 ########## App Web ##########
 
 # Configuração da página do Streamlit
-st.set_page_config(page_title="Data Science Academy", page_icon=":100:", layout="wide")
+st.set_page_config(page_title="Agente IA para NASDAQ", page_icon=":100:", layout="wide")
 
 # Barra Lateral com instruções
 st.sidebar.title("Instruções")
@@ -150,7 +150,7 @@ Este aplicativo realiza análises avançadas de preços de ações da Nasdaq em 
 
 # Botão de suporte na barra lateral
 if st.sidebar.button("Suporte"):
-    st.sidebar.write("No caso de dúvidas envie e-mail para: suporte@datascienceacademy.com.br")
+    st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
 
 # Título principal
 st.title(":100: Data Science Academy")
@@ -197,7 +197,7 @@ if st.button("Analisar"):
 
 
 # Fim
-# Obrigado DSA!
+
 
 
 
