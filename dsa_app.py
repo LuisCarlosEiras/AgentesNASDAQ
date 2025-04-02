@@ -14,8 +14,8 @@ from phi.tools.yfinance import YFinanceTools
 from phi.tools.duckduckgo import DuckDuckGo
 from dotenv import load_dotenv
 
-# Carrega o arquivo de variáveis de ambiente
-load_dotenv()
+# Configuração da chave API (Token)
+groq_api_key = st.secrets["GROQ_API_KEY"]
 
 ########## Analytics ##########
 
