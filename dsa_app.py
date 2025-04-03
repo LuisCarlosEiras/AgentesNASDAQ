@@ -36,23 +36,11 @@ except (AttributeError, KeyError):
         st.error("Chave API GROQ não configurada. Defina GROQ_API_KEY nos secrets do Streamlit ou como variável de ambiente.")
         st.stop()
 
-# --- Modelo Groq a ser Usado ---
-MODELO_GROQ_SELECIONADO = "llama-3.3-70b-versatile"  # Usado no orquestrador
-st.sidebar.info(f"Usando modelo Groq principal: `{MODELO_GROQ_SELECIONADO}`")
-
-# --- Subclasse Personalizada do Agent para Evitar OpenAI ---
-class CustomAgent(Agent):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.llm:
-            raise ValueError("Nenhum modelo LLM foi configurado para o agente.")
-        if not hasattr(self.llm, 'model') or not self.llm.model:
-            raise ValueError("O modelo do LLM não foi especificado corretamente.")
-
-    def update_model(self):
-        if self.llm is None:
-            raise ValueError("Nenhum LLM configurado para o agente.")
-        pass
+# --- Modelos Groq a serem Usados ---
+WEB_SEARCH_MODEL = "mixtral-8x7b-32768"  # Modelo válido do Groq
+FINANCEIRO_MODEL = "mixtral-8x7b-32768"  # Modelo válido do Groq
+ORQUESTRADOR_MODEL = "llama3-70b-8192"   # Modelo válido do Groq
+st.sidebar.info(f"Modelos Groq: Web Search: `{WEB_SEARCH_MODEL}`, Financeiro: `{FINANCEIRO_MODEL}`, Orquestrador: `{ORQUESTRADOR_MODEL}`")
 
 ########## Analytics ##########
 
@@ -195,24 +183,19 @@ multi_ai_agent = None
 agents_initialized = False
 
 try:
-    # Instanciando os modelos Groq separadamente para garantir configuração correta
-    web_search_llm = Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key)
-    financeiro_llm = Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key)
-    orquestrador_llm = Groq(model="llama-3.3-70b-versatile", api_key=groq_api_key)
-
-    dsa_agente_web_search = CustomAgent(
+    dsa_agente_web_search = Agent(
         name="DSA Agente Web Search",
         role="Fazer busca na web",
-        llm=web_search_llm,
+        llm=Groq(model=WEB_SEARCH_MODEL, api_key=groq_api_key),
         tools=[DuckDuckGo()],
         instructions=["Sempre inclua as fontes"],
         show_tool_calls=True,
         markdown=True
     )
 
-    dsa_agente_financeiro = CustomAgent(
+    dsa_agente_financeiro = Agent(
         name="DSA Agente Financeiro",
-        llm=financeiro_llm,
+        llm=Groq(model=FINANCEIRO_MODEL, api_key=groq_api_key),
         tools=[YFinanceTools(stock_price=True,
                              analyst_recommendations=True,
                              stock_fundamentals=True,
@@ -222,13 +205,19 @@ try:
         markdown=True
     )
 
-    multi_ai_agent = CustomAgent(
+    multi_ai_agent = Agent(
         team=[dsa_agente_web_search, dsa_agente_financeiro],
-        llm=orquestrador_llm,
+        llm=Groq(model=ORQUESTRADOR_MODEL, api_key=groq_api_key),
         instructions=["Sempre inclua as fontes", "Use tabelas para mostrar os dados"],
         show_tool_calls=True,
         markdown=True
     )
+    
+    # Adicionando logs para depuração
+    st.write(f"LLM do Web Search: {dsa_agente_web_search.llm.model}")
+    st.write(f"LLM do Financeiro: {dsa_agente_financeiro.llm.model}")
+    st.write(f"LLM do Orquestrador: {multi_ai_agent.llm.model}")
+    
     agents_initialized = True
 
 except Exception as e:
@@ -244,7 +233,7 @@ st.sidebar.markdown(f"""
 2. Clique em **Analisar**.
 3. Aguarde enquanto os dados são buscados, a previsão é gerada e a IA analisa as informações.
 
-**Modelo de IA Principal:** `{MODELO_GROQ_SELECIONADO}`
+**Modelo de IA Principal:** `{ORQUESTRADOR_MODEL}`
 """)
 st.sidebar.markdown("### Sobre a Previsão:")
 st.sidebar.markdown("""
