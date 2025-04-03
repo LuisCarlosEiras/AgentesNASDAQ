@@ -9,340 +9,191 @@ import yfinance as yf
 import plotly.graph_objects as go
 import plotly.express as px
 from phi.agent import Agent
-from phi.llm.groq import Groq
+from phi.model.groq import Groq
 from phi.tools.yfinance import YFinanceTools
 from phi.tools.duckduckgo import DuckDuckGo
-import pandas as pd
-from prophet import Prophet
-from prophet.plot import plot_plotly
-import os
+from dotenv import load_dotenv
 
-# --------------------------------------------------------------------------
-# !! IMPORTANTE: st.set_page_config DEVE SER O PRIMEIRO COMANDO STREAMLIT !!
-# --------------------------------------------------------------------------
-st.set_page_config(
-    page_title="Agente IA para NASDAQ",
-    page_icon="📊",
-    layout="wide"
-)
-# --------------------------------------------------------------------------
-
-# --- Configuração da Chave API (Token) ---
-try:
-    groq_api_key = st.secrets["GROQ_API_KEY"]
-except (AttributeError, KeyError):
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    if not groq_api_key:
-        st.error("Chave API GROQ não configurada. Defina GROQ_API_KEY nos secrets do Streamlit ou como variável de ambiente.")
-        st.stop()
-
-# --- Modelos Groq a serem Usados ---
-WEB_SEARCH_MODEL = "mixtral-8x7b-32768"  # Modelo válido do Groq
-FINANCEIRO_MODEL = "mixtral-8x7b-32768"  # Modelo válido do Groq
-ORQUESTRADOR_MODEL = "llama3-70b-8192"   # Modelo válido do Groq
-st.sidebar.info(f"Modelos Groq: Web Search: `{WEB_SEARCH_MODEL}`, Financeiro: `{FINANCEIRO_MODEL}`, Orquestrador: `{ORQUESTRADOR_MODEL}`")
+# Configuração da chave API (Token)
+groq_api_key = st.secrets["GROQ_API_KEY"]
 
 ########## Analytics ##########
 
+# Usa o cache de dados do Streamlit para armazenar os resultados da função e evitar reprocessamento
+# Define a função que extrai dados históricos de uma ação com base no ticker e período especificado
 @st.cache_data
-def dsa_extrai_dados(ticker, period="1y"):
-    """Extrai dados históricos de uma ação (cacheado)."""
-    try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=period)
-        if hist.empty:
-            st.toast(f"Nenhum dado histórico encontrado para {ticker} no período {period}.", icon="⚠️")
-            return None
-        hist.reset_index(inplace=True)
-        hist['Date'] = pd.to_datetime(hist['Date']).dt.tz_localize(None)
-        return hist
-    except Exception as e:
-        st.error(f"Erro ao buscar dados do yfinance para {ticker}: {e}")
-        return None
+def dsa_extrai_dados(ticker, period="6mo"):
 
-@st.cache_data
-def dsa_gera_previsao(hist_df, periods=90):
-    """Gera previsão futura usando Prophet (cacheado)."""
-    if hist_df is None or hist_df.empty:
-        return None, None
+    # Cria um objeto Ticker do Yahoo Finance para a ação especificada
+    stock = yf.Ticker(ticker)
+    
+    # Obtém o histórico de preços da ação para o período definido
+    hist = stock.history(period=period)
+    
+    # Reseta o índice do DataFrame para transformar a coluna de data em uma coluna normal
+    hist.reset_index(inplace=True)
+    
+    # Retorna o DataFrame com os dados históricos da ação
+    return hist
 
-    df_prophet = hist_df[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
-    if df_prophet.empty or len(df_prophet) < 2:
-        st.warning("Dados insuficientes para gerar previsão com Prophet.")
-        return None, None
+# Define a função para plotar o preço das ações com base no histórico fornecido
+def dsa_plot_stock_price(hist, ticker):
+    # Cria um gráfico de linha interativo usando Plotly Express
+    # O eixo X representa a data e o eixo Y representa o preço de fechamento das ações
+    # O título do gráfico inclui o ticker da ação e o período de análise
+    fig = px.line(hist, x="Date", y="Close", title=f"{ticker} Preços das Ações (Últimos 6 Meses)", markers=True)
+    
+    # Exibe o gráfico no Streamlit
+    st.plotly_chart(fig)
 
-    model = Prophet(
-        daily_seasonality=False,
-        weekly_seasonality=True,
-        yearly_seasonality=True if len(df_prophet) > 365 else False,
-        changepoint_prior_scale=0.05
+# Define a função para plotar um gráfico de candlestick com base no histórico fornecido
+def dsa_plot_candlestick(hist, ticker):
+
+    # Cria um objeto Figure do Plotly para armazenar o gráfico
+    fig = go.Figure(
+
+        # Adiciona um gráfico de candlestick com os dados do histórico da ação
+        data=[go.Candlestick(x=hist['Date'],        # Define as datas no eixo X
+                             open=hist['Open'],     # Define os preços de abertura
+                             high=hist['High'],     # Define os preços mais altos
+                             low=hist['Low'],       # Define os preços mais baixos
+                             close=hist['Close'])]  # Define os preços de fechamento
     )
+    
+    # Atualiza o layout do gráfico, incluindo um título dinâmico com o ticker da ação
+    fig.update_layout(title=f"{ticker} Candlestick Chart (Últimos 6 Meses)")
+    
+    # Exibe o gráfico no Streamlit
+    st.plotly_chart(fig)
 
-    try:
-        model.fit(df_prophet)
-        future = model.make_future_dataframe(periods=periods)
-        forecast = model.predict(future)
-        return model, forecast
-    except Exception as e:
-        st.error(f"Erro ao treinar ou prever com Prophet: {e}")
-        return None, None
+# Define a função para plotar médias móveis com base no histórico fornecido
+def dsa_plot_media_movel(hist, ticker):
 
-# --- Funções de Plotagem ---
-def dsa_plot_stock_price(hist, forecast, ticker):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=hist['Date'], y=hist['Close'], mode='lines+markers', name='Histórico'))
-    if forecast is not None and not forecast.empty:
-        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Previsão (yhat)', line=dict(color='orange', dash='dash')))
-        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_upper'], mode='lines', name='Incerteza Superior', line=dict(width=0), showlegend=False))
-        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat_lower'], mode='lines', name='Incerteza Inferior', line=dict(width=0), fillcolor='rgba(255, 165, 0, 0.2)', fill='tonexty', showlegend=False))
-    fig.update_layout(title=f"{ticker} Preços das Ações e Previsão (3 Meses)", yaxis_title='Preço (USD)')
-    st.plotly_chart(fig, use_container_width=True)
-
-def dsa_plot_candlestick(hist, forecast, ticker):
-    fig = go.Figure(data=[go.Candlestick(x=hist['Date'], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='Histórico')])
-    if forecast is not None and not forecast.empty:
-        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Previsão Fechamento (yhat)', line=dict(color='orange', dash='dash')))
-    fig.update_layout(title=f"{ticker} Candlestick e Previsão de Fechamento (3 Meses)", yaxis_title='Preço (USD)', xaxis_rangeslider_visible=False)
-    st.plotly_chart(fig, use_container_width=True)
-
-def dsa_plot_media_movel(hist, forecast, ticker):
+    # Calcula a Média Móvel Simples (SMA) de 20 períodos e adiciona ao DataFrame
     hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
+    
+    # Calcula a Média Móvel Exponencial (EMA) de 20 períodos e adiciona ao DataFrame
     hist['EMA_20'] = hist['Close'].ewm(span=20, adjust=False).mean()
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=hist['Date'], y=hist['Close'], mode='lines', name='Fechamento'))
-    fig.add_trace(go.Scatter(x=hist['Date'], y=hist['SMA_20'], mode='lines', name='SMA 20 Dias'))
-    fig.add_trace(go.Scatter(x=hist['Date'], y=hist['EMA_20'], mode='lines', name='EMA 20 Dias'))
-    if forecast is not None and not forecast.empty:
-        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Previsão Fechamento (yhat)', line=dict(color='orange', dash='dash')))
-    fig.update_layout(title=f"{ticker} Médias Móveis e Previsão de Fechamento (3 Meses)", yaxis_title='Preço (USD)')
-    st.plotly_chart(fig, use_container_width=True)
+    
+    # Cria um gráfico de linha interativo usando Plotly Express
+    # Plota os preços de fechamento, a SMA de 20 períodos e a EMA de 20 períodos
+    fig = px.line(hist, 
+                  x='Date', 
+                  y=['Close', 'SMA_20', 'EMA_20'],
+                  title=f"{ticker} Médias Móveis (Últimos 6 Meses)",  # Define o título do gráfico
+                  labels={'value': 'Price (USD)', 'Date': 'Date'})    # Define os rótulos dos eixos
+    
+    # Exibe o gráfico no Streamlit
+    st.plotly_chart(fig)
 
+# Define a função para plotar o volume de negociação da ação com base no histórico fornecido
 def dsa_plot_volume(hist, ticker):
-    fig = px.bar(hist, x='Date', y='Volume', title=f"{ticker} Volume de Negociação (Último Ano)")
-    fig.update_layout(yaxis_title='Volume')
-    st.plotly_chart(fig, use_container_width=True)
 
-# --- Geração de Comentário da IA ---
-def dsa_gera_comentario_previsao(ticker, hist_df, forecast_df, agent):
-    if forecast_df is None or forecast_df.empty or hist_df is None or hist_df.empty:
-        return "Dados insuficientes ou erro na previsão para gerar comentário."
-
-    try:
-        last_date_hist = hist_df['Date'].iloc[-1].strftime('%Y-%m-%d')
-        last_price_hist = hist_df['Close'].iloc[-1]
-        first_future_index = len(hist_df)
-        if first_future_index >= len(forecast_df):
-            return "Erro ao alinhar previsão com histórico para gerar comentário."
-
-        forecast_start_date = forecast_df['ds'].iloc[first_future_index].strftime('%Y-%m-%d')
-        forecast_end_date = forecast_df['ds'].iloc[-1].strftime('%Y-%m-%d')
-        forecast_end_price = forecast_df['yhat'].iloc[-1]
-        forecast_max_price = forecast_df['yhat_upper'].iloc[-1]
-        forecast_min_price = forecast_df['yhat_lower'].iloc[-1]
-
-        prompt = f"""
-        Analise a seguinte previsão de preço para a ação {ticker} para os próximos 3 meses, gerada pelo modelo Prophet.
-
-        Dados Históricos Relevantes:
-        - Última data histórica: {last_date_hist}
-        - Último preço de fechamento histórico: ${last_price_hist:.2f}
-
-        Previsão para os Próximos 3 Meses (de {forecast_start_date} até {forecast_end_date}):
-        - Preço previsto para {forecast_end_date}: ${forecast_end_price:.2f}
-        - Faixa de Incerteza para {forecast_end_date}: entre ${forecast_min_price:.2f} e ${forecast_max_price:.2f}
-
-        Com base *apenas* nesses dados de previsão e no último preço histórico:
-        1. Descreva a tendência geral prevista (alta, baixa, estável).
-        2. Comente brevemente sobre a confiança da previsão, mencionando a faixa de incerteza.
-        3. Forneça uma breve conclusão sobre o que a previsão sugere para os próximos 3 meses.
-
-        Seja conciso e direto ao ponto. Não use informações externas ou de ferramentas, baseie-se somente nos dados fornecidos aqui.
-        """
-
-        ai_comment_response = agent.run(prompt, stream=False)
-        clean_comment = str(ai_comment_response).strip() if not isinstance(ai_comment_response, str) else ai_comment_response.strip()
-        clean_comment = re.sub(r"(Running|Calling|Using) tool.*?\n", "", clean_comment, flags=re.IGNORECASE | re.DOTALL)
-        clean_comment = re.sub(r"\[.*?\]\(.*?\)", "", clean_comment)
-        clean_comment = clean_comment.replace("```json", "").replace("```", "").strip()
-
-        if not clean_comment or len(clean_comment) < 30:
-            st.toast("Resposta da IA sobre previsão foi curta ou vazia.", icon="ℹ️")
-            return "Não foi possível gerar um comentário detalhado da IA sobre a previsão neste momento."
-
-        return clean_comment
-
-    except Exception as e:
-        st.warning(f"Erro ao gerar comentário da IA: {e}")
-        return "Ocorreu um erro ao gerar o comentário da IA sobre a previsão."
+    # Cria um gráfico de barras interativo usando Plotly Express
+    # O eixo X representa a data e o eixo Y representa o volume negociado
+    fig = px.bar(hist, 
+                 x='Date', 
+                 y='Volume', 
+                 title=f"{ticker} Trading Volume (Últimos 6 Meses)")  # Define o título do gráfico
+    
+    # Exibe o gráfico no Streamlit
+    st.plotly_chart(fig)
 
 ########## Agentes de IA ##########
 
-dsa_agente_web_search = None
-dsa_agente_financeiro = None
-multi_ai_agent = None
-agents_initialized = False
+# Agentes de IA 
+dsa_agente_web_search = Agent(name="DSA Agente Web Search",
+                              role="Fazer busca na web",
+                              model=Groq(id="deepseek-r1-distill-llama-70b"),
+                              tools=[DuckDuckGo()],
+                              instructions=["Sempre inclua as fontes"],
+                              show_tool_calls=True, markdown=True)
 
-try:
-    dsa_agente_web_search = Agent(
-        name="DSA Agente Web Search",
-        role="Fazer busca na web",
-        llm=Groq(model=WEB_SEARCH_MODEL, api_key=groq_api_key),
-        tools=[DuckDuckGo()],
-        instructions=["Sempre inclua as fontes"],
-        show_tool_calls=True,
-        markdown=True
-    )
+dsa_agente_financeiro = Agent(name="DSA Agente Financeiro",
+                              model=Groq(id="deepseek-r1-distill-llama-70b"),
+                              tools=[YFinanceTools(stock_price=True,
+                                                   analyst_recommendations=True,
+                                                   stock_fundamentals=True,
+                                                   company_news=True)],
+                              instructions=["Use tabelas para mostrar os dados"],
+                              show_tool_calls=True, markdown=True)
 
-    dsa_agente_financeiro = Agent(
-        name="DSA Agente Financeiro",
-        llm=Groq(model=FINANCEIRO_MODEL, api_key=groq_api_key),
-        tools=[YFinanceTools(stock_price=True,
-                             analyst_recommendations=True,
-                             stock_fundamentals=True,
-                             company_news=True)],
-        instructions=["Use tabelas para mostrar os dados"],
-        show_tool_calls=True,
-        markdown=True
-    )
-
-    multi_ai_agent = Agent(
-        team=[dsa_agente_web_search, dsa_agente_financeiro],
-        llm=Groq(model=ORQUESTRADOR_MODEL, api_key=groq_api_key),
-        instructions=["Sempre inclua as fontes", "Use tabelas para mostrar os dados"],
-        show_tool_calls=True,
-        markdown=True
-    )
-    
-    # Adicionando logs para depuração
-    st.write(f"LLM do Web Search: {dsa_agente_web_search.llm.model}")
-    st.write(f"LLM do Financeiro: {dsa_agente_financeiro.llm.model}")
-    st.write(f"LLM do Orquestrador: {multi_ai_agent.llm.model}")
-    
-    agents_initialized = True
-
-except Exception as e:
-    st.error(f"Erro ao inicializar os Agentes de IA: {e}")
-    agents_initialized = False
+multi_ai_agent = Agent(team=[dsa_agente_web_search, dsa_agente_financeiro],
+                       model=Groq(id="llama-3.3-70b-versatile"),
+                       instructions=["Sempre inclua as fontes", "Use tabelas para mostrar os dados"],
+                       show_tool_calls=True, markdown=True)
 
 ########## App Web ##########
 
+# Configuração da página do Streamlit
+st.set_page_config(page_title="Agente IA para NASDAQ", page_icon=":954:", layout="wide")
+
+# Barra Lateral com instruções
 st.sidebar.title("Instruções")
-st.sidebar.markdown(f"""
-### Como Utilizar:
-1. Insira o símbolo do ticker da ação (ex: `MSFT`, `AAPL`) no campo abaixo.
-2. Clique em **Analisar**.
-3. Aguarde enquanto os dados são buscados, a previsão é gerada e a IA analisa as informações.
-
-**Modelo de IA Principal:** `{ORQUESTRADOR_MODEL}`
-""")
-st.sidebar.markdown("### Sobre a Previsão:")
 st.sidebar.markdown("""
-A previsão de 3 meses é gerada usando o modelo estatístico **Prophet**. Lembre-se:
-- Previsões são estimativas baseadas no histórico e **não garantias**.
-- O mercado financeiro é volátil e influenciado por muitos fatores.
-- Use esta análise como **uma ferramenta de apoio**, não como única base para decisões de investimento.
+### Como Utilizar a App:
+
+- Insira o símbolo do ticker da ação desejada no campo central.
+- Clique no botão **Analisar** para obter a análise em tempo real com visualizações e insights gerados por IA.
+
+### Exemplos de tickers válidos:
+- MSFT (Microsoft)
+- TSLA (Tesla)
+- AMZN (Amazon)
+- GOOG (Alphabet)
+
+Mais tickers podem ser encontrados aqui: https://stockanalysis.com/list/nasdaq-stocks/
+
+### Finalidade da App:
+Este aplicativo realiza análises avançadas de preços de ações da Nasdaq em tempo real utilizando Agentes de IA com modelo DeepSeek através do Groq e infraestrutura AWS para apoio a estratégias de Day Trade para monetização. Uma app completa de exemplo para quem deseja iniciar em Consultoria na Área de Dados e IA.
 """)
 
+# Botão de suporte na barra lateral
 if st.sidebar.button("Suporte"):
-    st.sidebar.write("Contato: luiscarloseiras@gmail.com")
+    st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
 
-st.title("📈 Agente de IA para Análise de Ações da NASDAQ")
-st.header("Análise Histórica, Previsão (3 Meses) e Insights de IA")
+# Título principal
+st.title(":954: Um Agente de IA para a NASDAQ")
 
-ticker = st.text_input("Digite o Código da Ação (ticker):", placeholder="Ex: AAPL, MSFT, NVDA", disabled=not agents_initialized).upper()
+# Interface principal
+st.header("Day Trade Analytics em Tempo Real")
 
-if st.button("Analisar", key="analyze_button", disabled=not agents_initialized):
-    if ticker and agents_initialized:
-        st.markdown("---")
-        progress_bar = st.progress(0, text="Iniciando análise...")
-        analysis_successful = False
-        ai_forecast_comment = "Comentário da previsão não gerado."
-        clean_analysis_response = "Análise da IA não gerada."
+# Caixa de texto para input do usuário
+ticker = st.text_input("Digite o Código (símbolo do ticker):").upper()
 
-        analysis_placeholder = st.empty()
-        charts_placeholder = st.container()
+# Se o usuário pressionar o botão, entramos neste bloco
+if st.button("Analisar"):
 
-        try:
-            progress_bar.progress(10, text=f"Buscando dados históricos para {ticker}...")
-            hist_data = dsa_extrai_dados(ticker)
-            if hist_data is None:
-                st.error(f"Falha ao obter dados históricos para {ticker}. Análise interrompida.")
-                progress_bar.empty()
-                st.stop()
+    # Se temos o código da ação (ticker)
+    if ticker:
 
-            progress_bar.progress(30, text=f"Gerando previsão de 3 meses para {ticker}...")
-            with st.spinner("Treinando modelo Prophet e gerando previsão..."):
-                model_prophet, forecast_data = dsa_gera_previsao(hist_data)
+        # Inicia o processamento
+        with st.spinner("Buscando os Dados em Tempo Real. Aguarde..."):
+            
+            # Obtém os dados
+            hist = dsa_extrai_dados(ticker)
+            
+            # Renderiza um subtítulo
+            st.subheader("Análise Gerada Por IA")
+            
+            # Executa o time de Agentes de IA
+            ai_response = multi_ai_agent.run(f"Resumir a recomendação do analista e compartilhar as últimas notícias para {ticker}")
 
-            if forecast_data is None:
-                st.toast(f"Não foi possível gerar a previsão para {ticker}.", icon="⚠️")
-                ai_forecast_comment = "Previsão não disponível."
-            else:
-                progress_bar.progress(50, text="Gerando comentário da IA sobre a previsão...")
-                with st.spinner("IA analisando a previsão..."):
-                    ai_forecast_comment = dsa_gera_comentario_previsao(ticker, hist_data, forecast_data, multi_ai_agent)
+            # Remove linhas que começam com "Running:"
+            # Remove o bloco "Running:" e também linhas "transfer_task_to_finance_ai_agent"
+            clean_response = re.sub(r"(Running:[\s\S]*?\n\n)|(^transfer_task_to_finance_ai_agent.*\n?)","", ai_response.content, flags=re.MULTILINE).strip()
 
-            progress_bar.progress(70, text=f"Buscando notícias e recomendações para {ticker}...")
-            with st.spinner(f"Consultando IA para recomendações e notícias de {ticker}..."):
-                prompt_analise = f"Forneça um resumo das recomendações de analistas e as últimas notícias para a ação {ticker}. Use o `DSA Agente Financeiro` para obter os dados."
-                ai_analysis_response = multi_ai_agent.run(prompt_analise, stream=False)
-                clean_analysis_response = str(ai_analysis_response).strip() if not isinstance(ai_analysis_response, str) else ai_analysis_response.strip()
-                clean_analysis_response = re.sub(r"(Running|Using|Calling tool|Delegate to).*?\n", "", clean_analysis_response, flags=re.IGNORECASE | re.DOTALL).strip()
-                clean_analysis_response = re.sub(r"DSA Agente Financeiro", "Agente Financeiro", clean_analysis_response)
-                clean_analysis_response = re.sub(r"`", "", clean_analysis_response)
+            # Imprime a resposta
+            st.markdown(clean_response)
 
-            progress_bar.progress(90, text="Renderizando resultados...")
+            # Renderiza os gráficos
+            st.subheader("Visualização dos Dados")
+            dsa_plot_stock_price(hist, ticker)
+            dsa_plot_candlestick(hist, ticker)
+            dsa_plot_media_movel(hist, ticker)
+            dsa_plot_volume(hist, ticker)
+    else:
+        st.error("Ticker inválido. Insira um símbolo de ação válido.")
 
-            analysis_placeholder.empty()
-            charts_placeholder.empty()
 
-            with analysis_placeholder.container():
-                st.subheader(f"Análise por IA para {ticker}")
-                if clean_analysis_response and clean_analysis_response != "Análise da IA não gerada.":
-                    st.markdown(clean_analysis_response)
-                else:
-                    st.warning("Não foi possível obter a análise de notícias/recomendações da IA.")
-                st.markdown("---")
-
-            with charts_placeholder.container():
-                st.subheader("Visualização dos Dados e Previsão")
-                st.markdown("##### Preço de Fechamento Histórico e Previsão")
-                dsa_plot_stock_price(hist_data, forecast_data, ticker)
-                if forecast_data is not None and not forecast_data.empty:
-                    st.markdown(f"**Comentário da IA sobre a Previsão:**\n {ai_forecast_comment}")
-                st.markdown("---")
-
-                st.markdown("##### Candlestick Histórico e Previsão de Fechamento")
-                dsa_plot_candlestick(hist_data, forecast_data, ticker)
-                if forecast_data is not None and not forecast_data.empty:
-                    st.markdown(f"**Comentário da IA sobre a Previsão:**\n {ai_forecast_comment}")
-                st.markdown("---")
-
-                st.markdown("##### Médias Móveis Históricas e Previsão de Fechamento")
-                dsa_plot_media_movel(hist_data, forecast_data, ticker)
-                if forecast_data is not None and not forecast_data.empty:
-                    st.markdown(f"**Comentário da IA sobre a Previsão:**\n {ai_forecast_comment}")
-                st.markdown("---")
-
-                st.markdown("##### Volume de Negociação Histórico")
-                dsa_plot_volume(hist_data, ticker)
-                st.markdown("**Nota:** A previsão de volume não está incluída nesta análise.")
-                st.markdown("---")
-
-            progress_bar.progress(100, text="Análise concluída!")
-            analysis_successful = True
-
-        except Exception as e:
-            st.error(f"Ocorreu um erro inesperado durante a análise principal: {e}")
-            st.exception(e)
-        finally:
-            progress_bar.empty()
-            if analysis_successful:
-                st.success(f"Análise para {ticker} concluída!")
-            else:
-                st.error(f"Análise para {ticker} encontrou problemas.")
-
-    elif not ticker:
-        st.warning("Por favor, insira um código de ação (ticker).")
-    elif not agents_initialized:
-        st.error("Os agentes de IA não foram inicializados corretamente. Verifique os erros acima e a configuração.")
+# Fim
