@@ -1,7 +1,3 @@
-# Módulo Especial de Consultoria na Área de Dados com Agentes de IA
-# Projeto Prático Para Consultoria na Área de Dados com Agentes de IA
-# Deploy de App Para Day Trade Analytics em Tempo Real com Agentes de IA, Groq, DeepSeek e AWS Para Monetização
-
 # Imports
 import re
 import streamlit as st
