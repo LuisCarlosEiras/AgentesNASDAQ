@@ -37,7 +37,7 @@ pillow==11.1.0
 platformdirs==4.3.6
 plotly==6.0.0
 
-prophet
+prophet==1.1.6
 
 primp==0.14.0
 protobuf==5.29.3
