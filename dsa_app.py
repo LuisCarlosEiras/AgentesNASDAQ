@@ -9,7 +9,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 import plotly.express as px
 from phi.agent import Agent
-from phi.llm.groq import Groq  # Importação específica para Groq
+from phi.llm.groq import Groq
 from phi.tools.yfinance import YFinanceTools
 from phi.tools.duckduckgo import DuckDuckGo
 import pandas as pd
@@ -37,8 +37,15 @@ except (AttributeError, KeyError):
         st.stop()
 
 # --- Modelo Groq a ser Usado ---
-MODELO_GROQ_SELECIONADO = "mixtral-8x7b-32768"
-st.sidebar.info(f"Usando modelo Groq: `{MODELO_GROQ_SELECIONADO}`")
+MODELO_GROQ_SELECIONADO = "llama-3.3-70b-versatile"  # Usado no orquestrador
+st.sidebar.info(f"Usando modelo Groq principal: `{MODELO_GROQ_SELECIONADO}`")
+
+# --- Subclasse Personalizada do Agent para Evitar OpenAI ---
+class CustomAgent(Agent):
+    def update_model(self):
+        if self.llm is None:
+            raise ValueError("Nenhum LLM configurado para o agente.")
+        pass
 
 ########## Analytics ##########
 
@@ -181,48 +188,34 @@ multi_ai_agent = None
 agents_initialized = False
 
 try:
-    dsa_agente_web_search = Agent(
-        name="DSA_Agente_Web_Search",
-        llm=Groq(model=MODELO_GROQ_SELECIONADO, api_key=groq_api_key),
+    dsa_agente_web_search = CustomAgent(
+        name="DSA Agente Web Search",
+        role="Fazer busca na web",
+        llm=Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key),  # Alterado para 'model' em vez de 'id'
         tools=[DuckDuckGo()],
-        instructions=["Você é um assistente de busca web.", "Use a ferramenta DuckDuckGo para encontrar informações atualizadas.", "Sempre inclua as fontes (URLs) nas suas respostas.", "Seja direto e informativo."],
-        show_tool_calls=False,
-        markdown=True,
-        output_schema=str
+        instructions=["Sempre inclua as fontes"],
+        show_tool_calls=True,
+        markdown=True
     )
 
-    dsa_agente_financeiro = Agent(
-        name="DSA_Agente_Financeiro",
-        llm=Groq(model=MODELO_GROQ_SELECIONADO, api_key=groq_api_key),
-        tools=[YFinanceTools(stock_price=False, analyst_recommendations=True, stock_fundamentals=True, company_news=True)],
-        instructions=["Você é um assistente de análise financeira.", "Use as ferramentas YFinanceTools para obter dados.", "Apresente recomendações de analistas e fundamentos da empresa em tabelas markdown.", "Resuma as notícias de forma concisa (3-5 pontos principais).", "Seja objetivo e foque nos dados."],
-        show_tool_calls=False,
-        markdown=True,
-        output_schema=str
+    dsa_agente_financeiro = CustomAgent(
+        name="DSA Agente Financeiro",
+        llm=Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key),  # Alterado para 'model' em vez de 'id'
+        tools=[YFinanceTools(stock_price=True,
+                             analyst_recommendations=True,
+                             stock_fundamentals=True,
+                             company_news=True)],
+        instructions=["Use tabelas para mostrar os dados"],
+        show_tool_calls=True,
+        markdown=True
     )
 
-    multi_ai_agent = Agent(
-        name="Orquestrador_Financeiro",
-        llm=Groq(model=MODELO_GROQ_SELECIONADO, api_key=groq_api_key),
+    multi_ai_agent = CustomAgent(
         team=[dsa_agente_web_search, dsa_agente_financeiro],
-        instructions=[
-            "Sua tarefa principal é responder às consultas do usuário sobre análise de ações.",
-            "**Delegação:**",
-            "  - Para notícias, recomendações de analistas ou fundamentos da ação, delegue para `DSA_Agente_Financeiro`.",
-            "  - Para informações gerais ou buscas na web, delegue para `DSA_Agente_Web_Search`.",
-            "**Geração Própria:**",
-            "  - Para gerar resumos ou comentários (como análises de previsões), use sua própria capacidade de linguagem com base nos dados fornecidos no prompt.",
-            "**Formatação:**",
-            "  - Combine as informações dos agentes delegados de forma coesa.",
-            "  - Use tabelas markdown para dados financeiros.",
-            "  - Inclua fontes de buscas na web.",
-            "**Estilo:**",
-            "  - Seja claro, conciso e profissional.",
-            "  - Evite menção a nomes de agentes ou logs internos no output final."
-        ],
-        show_tool_calls=False,
-        markdown=True,
-        output_schema=str
+        llm=Groq(model="llama-3.3-70b-versatile", api_key=groq_api_key),  # Alterado para 'model' em vez de 'id'
+        instructions=["Sempre inclua as fontes", "Use tabelas para mostrar os dados"],
+        show_tool_calls=True,
+        markdown=True
     )
     agents_initialized = True
 
@@ -239,7 +232,7 @@ st.sidebar.markdown(f"""
 2. Clique em **Analisar**.
 3. Aguarde enquanto os dados são buscados, a previsão é gerada e a IA analisa as informações.
 
-**Modelo de IA:** `{MODELO_GROQ_SELECIONADO}`
+**Modelo de IA Principal:** `{MODELO_GROQ_SELECIONADO}`
 """)
 st.sidebar.markdown("### Sobre a Previsão:")
 st.sidebar.markdown("""
@@ -290,11 +283,11 @@ if st.button("Analisar", key="analyze_button", disabled=not agents_initialized):
 
             progress_bar.progress(70, text=f"Buscando notícias e recomendações para {ticker}...")
             with st.spinner(f"Consultando IA para recomendações e notícias de {ticker}..."):
-                prompt_analise = f"Forneça um resumo das recomendações de analistas e as últimas notícias para a ação {ticker}. Use o `DSA_Agente_Financeiro` para obter os dados."
+                prompt_analise = f"Forneça um resumo das recomendações de analistas e as últimas notícias para a ação {ticker}. Use o `DSA Agente Financeiro` para obter os dados."
                 ai_analysis_response = multi_ai_agent.run(prompt_analise, stream=False)
                 clean_analysis_response = str(ai_analysis_response).strip() if not isinstance(ai_analysis_response, str) else ai_analysis_response.strip()
                 clean_analysis_response = re.sub(r"(Running|Using|Calling tool|Delegate to).*?\n", "", clean_analysis_response, flags=re.IGNORECASE | re.DOTALL).strip()
-                clean_analysis_response = re.sub(r"DSA_Agente_Financeiro", "Agente Financeiro", clean_analysis_response)
+                clean_analysis_response = re.sub(r"DSA Agente Financeiro", "Agente Financeiro", clean_analysis_response)
                 clean_analysis_response = re.sub(r"`", "", clean_analysis_response)
 
             progress_bar.progress(90, text="Renderizando resultados...")
