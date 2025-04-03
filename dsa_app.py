@@ -224,30 +224,54 @@ def dsa_gera_comentario_previsao(ticker, hist_df, forecast_df, agent):
 
 ########## Agentes de IA ##########
 
+# Modelo recomendado principal
+# MODELO_GROQ = "llama3-70b-8192"
+# Modelo alternativo (caso o principal falhe ou seja descontinuado)
+
+MODELO_GROQ = "mixtral-8x7b-32768" # <-- Use este como alternativa principal agora, mais estável
+
 # Agentes de IA
 dsa_agente_web_search = Agent(
     name="DSA Agente Web Search",
     role="Fazer busca na web",
-    # model=Groq(model="mixtral-8x7b-32768", api_key=groq_api_key), # Use um modelo disponível se deepseek não estiver
-    model=Groq(model="llama3-70b-8192", api_key=groq_api_key), # Llama3 70b é potente
+    model=Groq(model=MODELO_GROQ, api_key=groq_api_key), # Use a variável
     tools=[DuckDuckGo()],
     instructions=["Sempre inclua as fontes", "Seja direto e informativo."],
-    show_tool_calls=False, # Desligar para output mais limpo
+    show_tool_calls=False,
     markdown=True
 )
 
 dsa_agente_financeiro = Agent(
     name="DSA Agente Financeiro",
-    # model=Groq(model="mixtral-8x7b-32768", api_key=groq_api_key),
-    model=Groq(model="llama3-70b-8192", api_key=groq_api_key),
+    model=Groq(model=MODELO_GROQ, api_key=groq_api_key), # Use a variável
     tools=[YFinanceTools(stock_price=True,
                          analyst_recommendations=True,
                          stock_fundamentals=True,
                          company_news=True)],
     instructions=["Use tabelas markdown para mostrar os dados financeiros e recomendações.", "Resuma as notícias de forma concisa."],
-    show_tool_calls=False, # Desligar para output mais limpo
+    show_tool_calls=False,
     markdown=True
 )
+
+multi_ai_agent = Agent(
+    # O agente orquestrador pode usar o mesmo modelo ou um diferente se necessário
+    model=Groq(model=MODELO_GROQ, api_key=groq_api_key), # Use a variável
+    team=[dsa_agente_web_search, dsa_agente_financeiro],
+    # Adicionei o agente financeiro aqui também para que o orquestrador possa usar suas ferramentas diretamente se necessário
+    tools=[YFinanceTools(stock_price=True, analyst_recommendations=True, stock_fundamentals=True, company_news=True)], # Adicione as ferramentas que o orquestrador pode precisar usar diretamente
+    instructions=["Sua tarefa principal é orquestrar os outros agentes ou usar ferramentas para responder à consulta do usuário.",
+                  "Para notícias e recomendações, use o 'DSA Agente Financeiro'.",
+                  "Para buscas gerais na web, use o 'DSA Agente Web Search'.",
+                  "Para gerar comentários sobre previsões (quando solicitado explicitamente no prompt interno), use sua própria capacidade de linguagem.",
+                  "Sempre inclua as fontes quando usar busca na web.",
+                  "Use tabelas markdown para dados financeiros.",
+                  "Combine as informações de forma coesa e clara para o usuário.",
+                  "Seja direto e evite mensagens de 'Running tool' ou nomes de agentes no output final."],
+    show_tool_calls=False,
+    markdown=True
+)
+
+# Restante do seu código...
 
 multi_ai_agent = Agent(
     # O agente orquestrador pode ser um modelo mais capaz
