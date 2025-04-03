@@ -153,7 +153,7 @@ if st.sidebar.button("Suporte"):
     st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
 
 # Título principal
-st.title(":954: Um Agente de IA para a NASDAQ")
+st.title(":satellite_antenna: Um Agente de IA para a NASDAQ")
 
 # Interface principal
 st.header("Day Trade Analytics em Tempo Real")
