@@ -126,7 +126,7 @@ multi_ai_agent = Agent(team=[dsa_agente_web_search, dsa_agente_financeiro],
 ########## App Web ##########
 
 # Configuração da página do Streamlit
-st.set_page_config(page_title="Agente IA para acompanhar o tarifaço na NASDAQ", page_icon=":954:", layout="wide")
+st.set_page_config(page_title="Um Agente IA para acompanhar o tarifaço na NASDAQ", page_icon=":954:", layout="wide")
 
 # Barra Lateral com instruções
 st.sidebar.title("Instruções")
@@ -146,8 +146,7 @@ st.sidebar.markdown("""
 Mais tickers podem ser encontrados aqui: https://stockanalysis.com/list/nasdaq-stocks/
 
 ### Finalidade da App:
-Este aplicativo realiza análises avançadas de preços de ações da Nasdaq em tempo real utilizando Agentes de IA com modelo DeepSeek através do Groq e infraestrutura AWS para apoio a estratégias de Day Trade para monetização. Uma app completa de exemplo para quem deseja iniciar em Consultoria na Área de Dados e IA.
-""")
+Este aplicativo realiza análises avançadas de preços de ações da Nasdaq em tempo real utilizando Agentes de IA com modelo DeepSeek através do Groq e infraestrutura Streamlit. 
 
 # Botão de suporte na barra lateral
 if st.sidebar.button("Suporte"):
