@@ -126,7 +126,7 @@ multi_ai_agent = Agent(team=[dsa_agente_web_search, dsa_agente_financeiro],
 ########## App Web ##########
 
 # Configuração da página do Streamlit
-st.set_page_config(page_title="Agente IA para NASDAQ", page_icon=":954:", layout="wide")
+st.set_page_config(page_title="Agente IA para acompanhar o tarifaço na NASDAQ", page_icon=":954:", layout="wide")
 
 # Barra Lateral com instruções
 st.sidebar.title("Instruções")
