@@ -130,7 +130,7 @@ st.sidebar.markdown("""
 ### Como Utilizar a App:
 
 - Insira o símbolo do ticker da ação desejada no campo central.
-- Clique no botão **Analisar** para obter a análise em tempo real com visualizações e insights gerados por IA.
+- Clique em **Analisar** para gerar a análise e gráficos em tempo real.
 
 ### Exemplos de tickers válidos:
 - MSFT (Microsoft)
