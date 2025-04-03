@@ -42,6 +42,13 @@ st.sidebar.info(f"Usando modelo Groq principal: `{MODELO_GROQ_SELECIONADO}`")
 
 # --- Subclasse Personalizada do Agent para Evitar OpenAI ---
 class CustomAgent(Agent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.llm:
+            raise ValueError("Nenhum modelo LLM foi configurado para o agente.")
+        if not hasattr(self.llm, 'model') or not self.llm.model:
+            raise ValueError("O modelo do LLM não foi especificado corretamente.")
+
     def update_model(self):
         if self.llm is None:
             raise ValueError("Nenhum LLM configurado para o agente.")
@@ -188,10 +195,15 @@ multi_ai_agent = None
 agents_initialized = False
 
 try:
+    # Instanciando os modelos Groq separadamente para garantir configuração correta
+    web_search_llm = Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key)
+    financeiro_llm = Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key)
+    orquestrador_llm = Groq(model="llama-3.3-70b-versatile", api_key=groq_api_key)
+
     dsa_agente_web_search = CustomAgent(
         name="DSA Agente Web Search",
         role="Fazer busca na web",
-        llm=Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key),  # Alterado para 'model' em vez de 'id'
+        llm=web_search_llm,
         tools=[DuckDuckGo()],
         instructions=["Sempre inclua as fontes"],
         show_tool_calls=True,
@@ -200,7 +212,7 @@ try:
 
     dsa_agente_financeiro = CustomAgent(
         name="DSA Agente Financeiro",
-        llm=Groq(model="deepseek-r1-distill-llama-70b", api_key=groq_api_key),  # Alterado para 'model' em vez de 'id'
+        llm=financeiro_llm,
         tools=[YFinanceTools(stock_price=True,
                              analyst_recommendations=True,
                              stock_fundamentals=True,
@@ -212,7 +224,7 @@ try:
 
     multi_ai_agent = CustomAgent(
         team=[dsa_agente_web_search, dsa_agente_financeiro],
-        llm=Groq(model="llama-3.3-70b-versatile", api_key=groq_api_key),  # Alterado para 'model' em vez de 'id'
+        llm=orquestrador_llm,
         instructions=["Sempre inclua as fontes", "Use tabelas para mostrar os dados"],
         show_tool_calls=True,
         markdown=True
