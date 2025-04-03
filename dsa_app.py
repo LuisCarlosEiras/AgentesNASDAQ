@@ -13,65 +13,95 @@ from phi.model.groq import Groq
 from phi.tools.yfinance import YFinanceTools
 from phi.tools.duckduckgo import DuckDuckGo
 from dotenv import load_dotenv
-import pandas as pd
-import numpy as np
-from datetime import timedelta
 
 # Configuração da chave API (Token)
 groq_api_key = st.secrets["GROQ_API_KEY"]
 
 ########## Analytics ##########
 
+# Usa o cache de dados do Streamlit para armazenar os resultados da função e evitar reprocessamento
+# Define a função que extrai dados históricos de uma ação com base no ticker e período especificado
 @st.cache_data
 def dsa_extrai_dados(ticker, period="6mo"):
+
+    # Cria um objeto Ticker do Yahoo Finance para a ação especificada
     stock = yf.Ticker(ticker)
+    
+    # Obtém o histórico de preços da ação para o período definido
     hist = stock.history(period=period)
+    
+    # Reseta o índice do DataFrame para transformar a coluna de data em uma coluna normal
     hist.reset_index(inplace=True)
+    
+    # Retorna o DataFrame com os dados históricos da ação
     return hist
 
-# Função para gerar previsões simples baseadas em EMA
-def dsa_gera_previsao(hist, periods=90):
-    last_date = hist['Date'].iloc[-1]
-    future_dates = [last_date + timedelta(days=i) for i in range(1, periods + 1)]
-    last_ema = hist['Close'].ewm(span=20, adjust=False).mean().iloc[-1]
-    forecast = [last_ema * (1 + np.random.normal(0, 0.01)) for _ in range(periods)]  # Simulação simples
-    forecast_df = pd.DataFrame({'Date': future_dates, 'Forecast': forecast})
-    return forecast_df
-
+# Define a função para plotar o preço das ações com base no histórico fornecido
 def dsa_plot_stock_price(hist, ticker):
-    forecast_df = dsa_gera_previsao(hist)
-    fig = px.line(hist, x="Date", y="Close", title=f"{ticker} Preços das Ações (Últimos 6 Meses + Previsão)", markers=True)
-    fig.add_scatter(x=forecast_df['Date'], y=forecast_df['Forecast'], mode='lines', name='Previsão (3 meses)', line=dict(dash='dash'))
+    # Cria um gráfico de linha interativo usando Plotly Express
+    # O eixo X representa a data e o eixo Y representa o preço de fechamento das ações
+    # O título do gráfico inclui o ticker da ação e o período de análise
+    fig = px.line(hist, x="Date", y="Close", title=f"{ticker} Preços das Ações (Últimos 6 Meses)", markers=True)
+    
+    # Exibe o gráfico no Streamlit
     st.plotly_chart(fig)
-    st.markdown(f"**Comentário sobre a previsão:** A previsão para {ticker} nos próximos 3 meses é baseada na tendência da EMA recente com uma leve variação simulada. Observe que a volatilidade pode aumentar dependendo de eventos de mercado.")
 
+# Define a função para plotar um gráfico de candlestick com base no histórico fornecido
 def dsa_plot_candlestick(hist, ticker):
-    forecast_df = dsa_gera_previsao(hist)
+
+    # Cria um objeto Figure do Plotly para armazenar o gráfico
     fig = go.Figure(
-        data=[go.Candlestick(x=hist['Date'], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close']),
-              go.Scatter(x=forecast_df['Date'], y=forecast_df['Forecast'], mode='lines', name='Previsão (3 meses)', line=dict(dash='dash'))]
+
+        # Adiciona um gráfico de candlestick com os dados do histórico da ação
+        data=[go.Candlestick(x=hist['Date'],        # Define as datas no eixo X
+                             open=hist['Open'],     # Define os preços de abertura
+                             high=hist['High'],     # Define os preços mais altos
+                             low=hist['Low'],       # Define os preços mais baixos
+                             close=hist['Close'])]  # Define os preços de fechamento
     )
-    fig.update_layout(title=f"{ticker} Candlestick Chart (Últimos 6 Meses + Previsão)")
+    
+    # Atualiza o layout do gráfico, incluindo um título dinâmico com o ticker da ação
+    fig.update_layout(title=f"{ticker} Candlestick Chart (Últimos 6 Meses)")
+    
+    # Exibe o gráfico no Streamlit
     st.plotly_chart(fig)
-    st.markdown(f"**Comentário sobre a previsão:** A linha tracejada mostra uma projeção conservadora para {ticker}. Fatores como volume e notícias podem influenciar os preços além dessa estimativa.")
 
+# Define a função para plotar médias móveis com base no histórico fornecido
 def dsa_plot_media_movel(hist, ticker):
-    hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
-    hist['EMA_20'] = hist['Close'].ewm(span=20, adjust=False).mean()
-    forecast_df = dsa_gera_previsao(hist)
-    fig = px.line(hist, x='Date', y=['Close', 'SMA_20', 'EMA_20'], title=f"{ticker} Médias Móveis (Últimos 6 Meses + Previsão)", labels={'value': 'Price (USD)', 'Date': 'Date'})
-    fig.add_scatter(x=forecast_df['Date'], y=forecast_df['Forecast'], mode='lines', name='Previsão (3 meses)', line=dict(dash='dash'))
-    st.plotly_chart(fig)
-    st.markdown(f"**Comentário sobre a previsão:** A previsão para {ticker} segue a EMA de 20 dias, sugerindo continuidade da tendência atual, mas ajustes podem ser necessários com novos dados.")
 
-def dsa_plot_volume(hist, ticker):
-    forecast_df = dsa_gera_previsao(hist)  # Não usamos volume na previsão, mas mantemos consistência
-    fig = px.bar(hist, x='Date', y='Volume', title=f"{ticker} Trading Volume (Últimos 6 Meses)")
+    # Calcula a Média Móvel Simples (SMA) de 20 períodos e adiciona ao DataFrame
+    hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
+    
+    # Calcula a Média Móvel Exponencial (EMA) de 20 períodos e adiciona ao DataFrame
+    hist['EMA_20'] = hist['Close'].ewm(span=20, adjust=False).mean()
+    
+    # Cria um gráfico de linha interativo usando Plotly Express
+    # Plota os preços de fechamento, a SMA de 20 períodos e a EMA de 20 períodos
+    fig = px.line(hist, 
+                  x='Date', 
+                  y=['Close', 'SMA_20', 'EMA_20'],
+                  title=f"{ticker} Médias Móveis (Últimos 6 Meses)",  # Define o título do gráfico
+                  labels={'value': 'Price (USD)', 'Date': 'Date'})    # Define os rótulos dos eixos
+    
+    # Exibe o gráfico no Streamlit
     st.plotly_chart(fig)
-    st.markdown(f"**Comentário sobre a previsão:** O volume não é previsto diretamente, mas um aumento no volume futuro pode indicar maior interesse em {ticker}, impactando a previsão de preço.")
+
+# Define a função para plotar o volume de negociação da ação com base no histórico fornecido
+def dsa_plot_volume(hist, ticker):
+
+    # Cria um gráfico de barras interativo usando Plotly Express
+    # O eixo X representa a data e o eixo Y representa o volume negociado
+    fig = px.bar(hist, 
+                 x='Date', 
+                 y='Volume', 
+                 title=f"{ticker} Trading Volume (Últimos 6 Meses)")  # Define o título do gráfico
+    
+    # Exibe o gráfico no Streamlit
+    st.plotly_chart(fig)
 
 ########## Agentes de IA ##########
 
+# Agentes de IA 
 dsa_agente_web_search = Agent(name="DSA Agente Web Search",
                               role="Fazer busca na web",
                               model=Groq(id="deepseek-r1-distill-llama-70b"),
@@ -81,7 +111,10 @@ dsa_agente_web_search = Agent(name="DSA Agente Web Search",
 
 dsa_agente_financeiro = Agent(name="DSA Agente Financeiro",
                               model=Groq(id="deepseek-r1-distill-llama-70b"),
-                              tools=[YFinanceTools(stock_price=True, analyst_recommendations=True, stock_fundamentals=True, company_news=True)],
+                              tools=[YFinanceTools(stock_price=True,
+                                                   analyst_recommendations=True,
+                                                   stock_fundamentals=True,
+                                                   company_news=True)],
                               instructions=["Use tabelas para mostrar os dados"],
                               show_tool_calls=True, markdown=True)
 
@@ -92,11 +125,14 @@ multi_ai_agent = Agent(team=[dsa_agente_web_search, dsa_agente_financeiro],
 
 ########## App Web ##########
 
+# Configuração da página do Streamlit
 st.set_page_config(page_title="Agente IA para NASDAQ", page_icon=":954:", layout="wide")
 
+# Barra Lateral com instruções
 st.sidebar.title("Instruções")
 st.sidebar.markdown("""
 ### Como Utilizar a App:
+
 - Insira o símbolo do ticker da ação desejada no campo central.
 - Clique no botão **Analisar** para obter a análise em tempo real com visualizações e insights gerados por IA.
 
@@ -109,25 +145,48 @@ st.sidebar.markdown("""
 Mais tickers podem ser encontrados aqui: https://stockanalysis.com/list/nasdaq-stocks/
 
 ### Finalidade da App:
-Este aplicativo realiza análises avançadas de preços de ações da Nasdaq em tempo real utilizando Agentes de IA com modelo DeepSeek através do Groq e infraestrutura AWS para apoio a estratégias de Day Trade para monetização.
+Este aplicativo realiza análises avançadas de preços de ações da Nasdaq em tempo real utilizando Agentes de IA com modelo DeepSeek através do Groq e infraestrutura AWS para apoio a estratégias de Day Trade para monetização. Uma app completa de exemplo para quem deseja iniciar em Consultoria na Área de Dados e IA.
 """)
 
+# Botão de suporte na barra lateral
 if st.sidebar.button("Suporte"):
     st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
 
+# Título principal
 st.title(":954: Um Agente de IA para a NASDAQ")
+
+# Interface principal
 st.header("Day Trade Analytics em Tempo Real")
 
+# Caixa de texto para input do usuário
 ticker = st.text_input("Digite o Código (símbolo do ticker):").upper()
 
+# Se o usuário pressionar o botão, entramos neste bloco
 if st.button("Analisar"):
+
+    # Se temos o código da ação (ticker)
     if ticker:
+
+        # Inicia o processamento
         with st.spinner("Buscando os Dados em Tempo Real. Aguarde..."):
+            
+            # Obtém os dados
             hist = dsa_extrai_dados(ticker)
+            
+            # Renderiza um subtítulo
             st.subheader("Análise Gerada Por IA")
+            
+            # Executa o time de Agentes de IA
             ai_response = multi_ai_agent.run(f"Resumir a recomendação do analista e compartilhar as últimas notícias para {ticker}")
+
+            # Remove linhas que começam com "Running:"
+            # Remove o bloco "Running:" e também linhas "transfer_task_to_finance_ai_agent"
             clean_response = re.sub(r"(Running:[\s\S]*?\n\n)|(^transfer_task_to_finance_ai_agent.*\n?)","", ai_response.content, flags=re.MULTILINE).strip()
+
+            # Imprime a resposta
             st.markdown(clean_response)
+
+            # Renderiza os gráficos
             st.subheader("Visualização dos Dados")
             dsa_plot_stock_price(hist, ticker)
             dsa_plot_candlestick(hist, ticker)
@@ -135,3 +194,6 @@ if st.button("Analisar"):
             dsa_plot_volume(hist, ticker)
     else:
         st.error("Ticker inválido. Insira um símbolo de ação válido.")
+
+
+# Fim
