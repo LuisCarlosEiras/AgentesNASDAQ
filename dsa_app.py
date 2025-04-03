@@ -147,6 +147,7 @@ Mais tickers podem ser encontrados aqui: https://stockanalysis.com/list/nasdaq-s
 
 ### Finalidade da App:
 Este aplicativo realiza análises avançadas de preços de ações da Nasdaq em tempo real utilizando Agentes de IA com modelo DeepSeek através do Groq e infraestrutura Streamlit. 
+""")
 
 # Botão de suporte na barra lateral
 if st.sidebar.button("Suporte"):
