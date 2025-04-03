@@ -141,6 +141,7 @@ st.sidebar.markdown("""
 - TSLA (Tesla)
 - AMZN (Amazon)
 - GOOG (Alphabet)
+- NDAQ (NASDAQ)
 
 Mais tickers podem ser encontrados aqui: https://stockanalysis.com/list/nasdaq-stocks/
 
