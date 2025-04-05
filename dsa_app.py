@@ -174,7 +174,7 @@ if st.button("Analisar"):
             st.subheader("Análise Gerada Por IA")
             
             # Executa o time de Agentes de IA
-            ai_response = multi_ai_agent.run(f"Resumir a recomendação do analista e compartilhar as últimas notícias para {ticker}")
+            ai_response = multi_ai_agent.run(f"Resumir a recomendação do analista, incluindo as consequências do tarifaço do Trump e compartilhar as últimas notícias para {ticker}")
 
             # Remove linhas que começam com "Running:"
             # Remove o bloco "Running:" e também linhas "transfer_task_to_finance_ai_agent"
