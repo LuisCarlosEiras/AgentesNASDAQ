@@ -134,6 +134,7 @@ st.sidebar.markdown("""
 
 ### Exemplos de tickers válidos:
 - MSFT (Microsoft)
+- DJT (Trump)
 - TSLA (Tesla)
 - AMZN (Amazon)
 - GOOG (Alphabet)
