@@ -72,7 +72,7 @@ def dsa_plot_prophet_forecast(hist, ticker):
         # Verificar se há dados suficientes
         if len(df_prophet) < 2:
             st.error(f"Não há dados suficientes para previsão de {ticker}.")
-            return
+            return None, None
         
         # Inicializar e ajustar o modelo Prophet
         model = Prophet(daily_seasonality=True)
@@ -134,9 +134,59 @@ def dsa_plot_prophet_forecast(hist, ticker):
         
         # Exibir o gráfico no Streamlit
         st.plotly_chart(fig)
+        
+        return df_prophet, forecast
     
     except Exception as e:
         st.error(f"Erro ao gerar previsão para {ticker}: {str(e)}")
+        return None, None
+
+def dsa_analyze_prophet_forecast(df_prophet, forecast, ticker):
+    if df_prophet is None or forecast is None:
+        return
+    
+    try:
+        # Último preço histórico
+        last_price = df_prophet['y'].iloc[-1]
+        
+        # Preço previsto no final do período (90 dias)
+        final_predicted_price = forecast['yhat'].iloc[-1]
+        
+        # Intervalos de confiança no final do período
+        final_upper = forecast['yhat_upper'].iloc[-1]
+        final_lower = forecast['yhat_lower'].iloc[-1]
+        
+        # Calcular variação percentual
+        percent_change = ((final_predicted_price - last_price) / last_price) * 100
+        
+        # Determinar a tendência
+        if percent_change > 2:
+            trend = "alta"
+        elif percent_change < -2:
+            trend = "baixa"
+        else:
+            trend = "estabilidade"
+        
+        # Calcular volatilidade (média da largura dos intervalos de confiança)
+        confidence_width = (forecast['yhat_upper'] - forecast['yhat_lower']).mean()
+        volatility = "alta" if confidence_width / last_price > 0.1 else "moderada" if confidence_width / last_price > 0.05 else "baixa"
+        
+        # Resumo da análise
+        analysis = f"""
+        ### Análise da Previsão para {ticker} (Próximos 3 Meses)
+        
+        - **Tendência**: A previsão indica uma tendência de **{trend}**.
+        - **Variação Esperada**: O preço deve variar em aproximadamente **{percent_change:.2f}%**, de ${last_price:.2f} para ${final_predicted_price:.2f}.
+        - **Intervalo de Confiança**: No final do período, o preço pode estar entre **${final_lower:.2f}** e **${final_upper:.2f}**.
+        - **Volatilidade**: A incerteza da previsão é **{volatility}**, com base nos intervalos de confiança.
+        - **Observação**: A previsão é baseada em dados históricos e não considera eventos externos inesperados (ex.: mudanças regulatórias ou "tarifaço"). Considere isso ao tomar decisões.
+        """
+        
+        # Exibir a análise no Streamlit
+        st.markdown(analysis)
+    
+    except Exception as e:
+        st.error(f"Erro ao analisar previsão para {ticker}: {str(e)}")
 
 ########## Agentes de IA ##########
 
@@ -183,13 +233,14 @@ st.sidebar.markdown("""
 Mais tickers podem ser encontrados aqui: https://stockanalysis.com/list/nasdaq-stocks/
 
 ### Finalidade da App:
-Ações da Nasdaq analisadas em tempo real por Agentes de IA usando DeepSeek através do Groq, previsão pelo Prophet e infraestrutura Streamlit.""")
+Ações da Nasdaq analisadas em tempo real por Agentes de IA usando DeepSeek através do Groq e infraestrutura Streamlit. 
+""")
 
 if st.sidebar.button("Suporte"):
     st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
 
 st.title(":satellite_antenna: Um Agente IA para acompanhar o tarifaço na NASDAQ")
-st.header("Day Trade Analytics em Tempo Real e Previsão para os Próximos 3 Meses")
+st.header("Day Trade Analytics em Tempo Real")
 
 ticker = st.text_input("Digite o Código (símbolo do ticker):").upper()
 
@@ -207,6 +258,7 @@ if st.button("Analisar"):
             dsa_plot_candlestick(hist, ticker)
             dsa_plot_media_movel(hist, ticker)
             dsa_plot_volume(hist, ticker)
-            dsa_plot_prophet_forecast(hist, ticker)
+            df_prophet, forecast = dsa_plot_prophet_forecast(hist, ticker)
+            dsa_analyze_prophet_forecast(df_prophet, forecast, ticker)
     else:
         st.error("Ticker inválido. Insira um símbolo de ação válido.")
