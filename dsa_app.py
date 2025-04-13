@@ -61,8 +61,8 @@ def dsa_plot_prophet_forecast(hist, ticker):
         # Preparar os dados para o Prophet
         df_prophet = hist[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'}).copy()
         
-        # Garantir que 'ds' é datetime
-        df_prophet['ds'] = pd.to_datetime(df_prophet['ds'])
+        # Garantir que 'ds' é datetime e remover fuso horário
+        df_prophet['ds'] = pd.to_datetime(df_prophet['ds']).dt.tz_localize(None)
         
         # Verificar e remover valores ausentes
         if df_prophet['y'].isnull().any() or df_prophet['ds'].isnull().any():
