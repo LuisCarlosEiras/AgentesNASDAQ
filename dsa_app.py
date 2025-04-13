@@ -9,15 +9,14 @@ from phi.model.groq import Groq
 from phi.tools.yfinance import YFinanceTools
 from phi.tools.duckduckgo import DuckDuckGo
 from dotenv import load_dotenv
-from prophet import Prophet  # Nova importação para o Prophet
-import pandas as pd  # Adicionada explicitamente para compatibilidade
+from prophet import Prophet
+import pandas as pd
 
 # Configuração da chave API (Token)
 groq_api_key = st.secrets["GROQ_API_KEY"]
 
 ########## Analytics ##########
 
-# Usa o cache de dados do Streamlit para armazenar os resultados da função e evitar reprocessamento
 @st.cache_data
 def dsa_extrai_dados(ticker, period="6mo"):
     stock = yf.Ticker(ticker)
@@ -25,12 +24,10 @@ def dsa_extrai_dados(ticker, period="6mo"):
     hist.reset_index(inplace=True)
     return hist
 
-# Define a função para plotar o preço das ações
 def dsa_plot_stock_price(hist, ticker):
     fig = px.line(hist, x="Date", y="Close", title=f"{ticker} Preços das Ações (Últimos 6 Meses)", markers=True)
     st.plotly_chart(fig)
 
-# Define a função para plotar um gráfico de candlestick
 def dsa_plot_candlestick(hist, ticker):
     fig = go.Figure(
         data=[go.Candlestick(x=hist['Date'],
@@ -42,7 +39,6 @@ def dsa_plot_candlestick(hist, ticker):
     fig.update_layout(title=f"{ticker} Candlestick Chart (Últimos 6 Meses)")
     st.plotly_chart(fig)
 
-# Define a função para plotar médias móveis
 def dsa_plot_media_movel(hist, ticker):
     hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
     hist['EMA_20'] = hist['Close'].ewm(span=20, adjust=False).mean()
@@ -53,7 +49,6 @@ def dsa_plot_media_movel(hist, ticker):
                   labels={'value': 'Price (USD)', 'Date': 'Date'})
     st.plotly_chart(fig)
 
-# Define a função para plotar o volume de negociação
 def dsa_plot_volume(hist, ticker):
     fig = px.bar(hist, 
                  x='Date', 
@@ -61,71 +56,87 @@ def dsa_plot_volume(hist, ticker):
                  title=f"{ticker} Trading Volume (Últimos 6 Meses)")
     st.plotly_chart(fig)
 
-# Nova função para previsão com Prophet
 def dsa_plot_prophet_forecast(hist, ticker):
-    # Preparar os dados para o Prophet
-    df_prophet = hist[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
+    try:
+        # Preparar os dados para o Prophet
+        df_prophet = hist[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'}).copy()
+        
+        # Garantir que 'ds' é datetime
+        df_prophet['ds'] = pd.to_datetime(df_prophet['ds'])
+        
+        # Verificar e remover valores ausentes
+        if df_prophet['y'].isnull().any() or df_prophet['ds'].isnull().any():
+            st.warning(f"Dados incompletos para {ticker}. Removendo valores ausentes.")
+            df_prophet = df_prophet.dropna()
+        
+        # Verificar se há dados suficientes
+        if len(df_prophet) < 2:
+            st.error(f"Não há dados suficientes para previsão de {ticker}.")
+            return
+        
+        # Inicializar e ajustar o modelo Prophet
+        model = Prophet(daily_seasonality=True)
+        model.fit(df_prophet)
+        
+        # Criar um DataFrame para os próximos 90 dias
+        future = model.make_future_dataframe(periods=90)
+        
+        # Gerar previsões
+        forecast = model.predict(future)
+        
+        # Criar o gráfico com Plotly
+        fig = go.Figure()
+        
+        # Adicionar os dados históricos
+        fig.add_trace(go.Scatter(
+            x=df_prophet['ds'],
+            y=df_prophet['y'],
+            mode='lines',
+            name='Dados Históricos'
+        ))
+        
+        # Adicionar a previsão
+        fig.add_trace(go.Scatter(
+            x=forecast['ds'],
+            y=forecast['yhat'],
+            mode='lines',
+            name='Previsão',
+            line=dict(color='orange')
+        ))
+        
+        # Adicionar intervalos de confiança
+        fig.add_trace(go.Scatter(
+            x=forecast['ds'],
+            y=forecast['yhat_upper'],
+            mode='lines',
+            name='Limite Superior',
+            line=dict(width=0),
+            showlegend=False
+        ))
+        fig.add_trace(go.Scatter(
+            x=forecast['ds'],
+            y=forecast['yhat_lower'],
+            mode='lines',
+            name='Limite Inferior',
+            line=dict(width=0),
+            fill='tonexty',
+            fillcolor='rgba(255, 165, 0, 0.2)',
+            showlegend=False
+        ))
+        
+        # Atualizar o layout do gráfico
+        fig.update_layout(
+            title=f"{ticker} Previsão de Preços para os Próximos 3 Meses",
+            xaxis_title="Data",
+            yaxis_title="Preço (USD)",
+            template="plotly_white"
+        )
+        
+        # Exibir o gráfico no Streamlit
+        st.plotly_chart(fig)
     
-    # Inicializar e ajustar o modelo Prophet
-    model = Prophet(daily_seasonality=True)
-    model.fit(df_prophet)
-    
-    # Criar um DataFrame para os próximos 90 dias (3 meses)
-    future = model.make_future_dataframe(periods=90)
-    
-    # Gerar previsões
-    forecast = model.predict(future)
-    
-    # Criar o gráfico com Plotly
-    fig = go.Figure()
-    
-    # Adicionar os dados históricos
-    fig.add_trace(go.Scatter(
-        x=df_prophet['ds'],
-        y=df_prophet['y'],
-        mode='lines',
-        name='Dados Históricos'
-    ))
-    
-    # Adicionar a previsão
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat'],
-        mode='lines',
-        name='Previsão',
-        line=dict(color='orange')
-    ))
-    
-    # Adicionar intervalos de confiança
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat_upper'],
-        mode='lines',
-        name='Limite Superior',
-        line=dict(width=0),
-        showlegend=False
-    ))
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat_lower'],
-        mode='lines',
-        name='Limite Inferior',
-        line=dict(width=0),
-        fill='tonexty',
-        fillcolor='rgba(255, 165, 0, 0.2)',
-        showlegend=False
-    ))
-    
-    # Atualizar o layout do gráfico
-    fig.update_layout(
-        title=f"{ticker} Previsão de Preços para os Próximos 3 Meses",
-        xaxis_title="Data",
-        yaxis_title="Preço (USD)",
-        template="plotly_white"
-    )
-    
-    # Exibir o gráfico no Streamlit
-    st.plotly_chart(fig)
+    except Exception as e:
+        st.error(f"Erro ao gerar previsão para {ticker}: {str(e)}")
 
 ########## Agentes de IA ##########
 
@@ -197,6 +208,6 @@ if st.button("Analisar"):
             dsa_plot_candlestick(hist, ticker)
             dsa_plot_media_movel(hist, ticker)
             dsa_plot_volume(hist, ticker)
-            dsa_plot_prophet_forecast(hist, ticker)  # Nova chamada para a previsão
+            dsa_plot_prophet_forecast(hist, ticker)
     else:
         st.error("Ticker inválido. Insira um símbolo de ação válido.")
