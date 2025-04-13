@@ -246,7 +246,7 @@ if st.sidebar.button("Suporte"):
     st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
 
 st.title(":satellite_antenna: Um Agente IA para acompanhar o tarifaço na NASDAQ")
-st.header("Day Trade Analytics em Tempo Real")
+st.header("Day Trade Analytics em Tempo Real e Previsão para os Próximos 3 Meses")
 
 ticker = st.text_input("Digite o Código (símbolo do ticker):").upper()
 
