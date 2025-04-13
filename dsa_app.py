@@ -135,6 +135,7 @@ def dsa_plot_prophet_forecast(hist, ticker):
         # Exibir o gráfico no Streamlit
         st.plotly_chart(fig)
         
+        # Retornar df_prophet e forecast para análise
         return df_prophet, forecast
     
     except Exception as e:
@@ -142,10 +143,15 @@ def dsa_plot_prophet_forecast(hist, ticker):
         return None, None
 
 def dsa_analyze_prophet_forecast(df_prophet, forecast, ticker):
-    if df_prophet is None or forecast is None:
-        return
-    
     try:
+        # Verificar se os dados são válidos
+        if df_prophet is None or forecast is None:
+            st.warning(f"Não foi possível analisar a previsão para {ticker}: dados ausentes.")
+            return
+        
+        # Depuração: Confirmar que a função está sendo chamada
+        st.write(f"Executando análise da previsão para {ticker}...")
+        
         # Último preço histórico
         last_price = df_prophet['y'].iloc[-1]
         
