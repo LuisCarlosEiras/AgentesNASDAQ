@@ -183,8 +183,7 @@ st.sidebar.markdown("""
 Mais tickers podem ser encontrados aqui: https://stockanalysis.com/list/nasdaq-stocks/
 
 ### Finalidade da App:
-Ações da Nasdaq analisadas em tempo real por Agentes de IA usando DeepSeek através do Groq, previsão pelo Prophet e infraestrutura Streamlit. 
-""")
+Ações da Nasdaq analisadas em tempo real por Agentes de IA usando DeepSeek através do Groq, previsão pelo Prophet e infraestrutura Streamlit.""")
 
 if st.sidebar.button("Suporte"):
     st.sidebar.write("No caso de dúvidas envie e-mail para: luiscarloseiras@gmail.com")
